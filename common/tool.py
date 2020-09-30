@@ -86,13 +86,15 @@ class GeneralTool:
 class ExcelTool:
 
     def __init__(self, filepath=None):
-        self.filepath = filepath
+        self.__filepath = filepath
         self.__load_workbook()
 
     def __load_workbook(self):
-        if self.filepath:
-            self.workbook = load_workbook(self.filepath)
+        if self.__filepath:
+            self.workbook = load_workbook(self.__filepath)
             self.sheetnames = self.workbook.sheetnames
+        else:
+            self.workbook = Workbook()
 
     def merge_dict(self, sheetname, dictname='dictname', merge_column='1', value_column=2, skiplines=1):
         '''
@@ -164,22 +166,21 @@ class ExcelTool:
         '''
         [('9759', 's1011713', None, 'customSize'), ('9759', 's1011713', 'customcolor.customcolorname', None)]
         :param sheetname:
-        :param skiplines: 跳过前几行
+        :param skiplines: lines to skip, like skip 2 line;
         :return: 如上格式 行列表
         '''
         sheet = self.workbook[sheetname]
         values = list(sheet.values)  # generator > list
         if skiplines > len(values):
             raise ValueError('there is no more lines to skip!')
-        self.workbook.close()
         return values[skiplines:]
 
     @classmethod
-    def write(cls, reportlist, title, startrow=1, startcol=1, filename='myexcel.xlsx',
+    def write(cls, datas: list, title, startrow=1, startcol=1, filename='myexcel.xlsx',
               sheetname='report'):
         '''
-        :param reportlist: 需要写入的内容【二维数据】,like [(111, 222, 333, 444), ('aaa', 'bbb', 'ccc'), ('aaa1', 'bbb2', 'ccc3', 'ddd4', 'eee5')]
-        :param title: 需要写入的标题
+        :param datas: 需要写入的内容【二维数据】,like [(111, 222, 333, 444), ('aaa', 'bbb', 'ccc'), ('aaa1', 'bbb2', 'ccc3', 'ddd4', 'eee5')]
+        :param title: 需要写入的标题 【一维数组】
         :param filename: 生成的excel名称 like myexcel.xlsx
         :param sheetname: 生成的sheet名称 like sheet1
         :return: generate xx.xlsx file
@@ -193,29 +194,54 @@ class ExcelTool:
             for col, v in enumerate(title):
                 sheet.cell(startrow, col + startcol, title[col])
             startrow += 1
-
-        for row, item in enumerate(reportlist, start=0):  # 索引从1 开始
+        for row, item in enumerate(datas, start=0):  # 索引从1 开始
             for col, value in enumerate(item, start=0):
                 # 默认从第一行，第一列开始写 (row, column, value=None)
-                sheet.cell(row + startrow, col + startcol, str(reportlist[row][col]))
-        # save excel
+                sheet.cell(row + startrow, col + startcol, str(datas[row][col]))
+
+        for col, value in enumerate(datas, start=0):
+            # 默认从第一行，第一列开始写 (row, column, value=None)
+            sheet.cell(startrow + 1, col + startcol, str(value))
+            sheet.append(datas)
+            # save excel
         workbook.save(filename=filename)
         workbook.close()
+
+    def write_data(self, filename, sheetname, datas: list):
+        '''
+        :param filename:
+        :param sheetname:
+        :param datas: 一维数组
+        :return:
+        '''
+        if sheetname not in self.workbook.sheetnames:
+            self.workbook.create_sheet(sheetname, index=0)
+
+        sheet = self.workbook[sheetname]
+        sheet.append([str(item) for item in datas])
+        self.workbook.save(filename)
 
     def getsheet(self, sheetname):
         return self.workbook[sheetname]
 
-    def get_dict_rows(self, sheetname, index_keyrow=0, index_valuerow=2, skip_lines=0):
+    def merge_row(self, sheetname, idx_keyrow=0, idx_valuerow=1, skip_lines=0):
         '''
         :param sheetname:
-        :param index_keyrow: 第几行作为key 行
+        :param idx_keyrow: 第几行作为key 行
         :param skip_lines:
         :return: key:value 字典数据
         '''
         values = self.get_sheet_values(sheetname, skiplines=skip_lines)
-        # print(values)
-        if index_valuerow < len(values):
-            return dict(zip(values[index_keyrow], values[index_valuerow]))
+        return dict(zip(values[idx_keyrow], values[idx_valuerow]))
+
+    def merge_list(self, valuelist, idx_krow=0, idx_vrow=1):
+        '''
+        :param sheetname:
+        :param idx_krow: 第几行作为key 行
+        :param skip_lines:
+        :return: key:value 字典数据
+        '''
+        return dict(zip(valuelist[idx_krow], valuelist[idx_vrow]))
 
 
 class CommonTool():

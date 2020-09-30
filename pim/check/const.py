@@ -2,29 +2,52 @@ from configparser import RawConfigParser
 
 conf = RawConfigParser()
 conf.optionxform = str
-conf.read('config.ini', encoding='utf-8-sig')
+conf.read('config_g2000.ini', encoding='utf-8-sig')
 
-headers_dsg = dict(conf.items('headers_dsg'))
-headers_pim = dict(conf.items('headers_pim'))
+HEADERS_DSG = dict(conf.items('headers_dsg'))
+HEADERS_PIM = dict(conf.items('headers_pim'))
+
+# attr position
+SUB_POSITION = dict(conf.items('position'))
 
 # HOST
-url_pim = conf.get('Host', 'pim')
-url_design = conf.get('Host', 'design')
+URL_PIM = conf.get('Host', 'pim')
+URL_DESIGN = conf.get('Host', 'design')
 
 # 渠道
-channel = conf.get('Common', 'channel')
-brand = conf.get('Common', 'brand')
+CHANNEL = conf.get('Common', 'channel')
+BRAND = conf.get('Common', 'brand')
 
 # postion
 # brand = conf.get('Postion', 'brand')
 
-if channel == 'TM':
+if CHANNEL == 'TM':
     fieldmap = dict(conf.items('TMFieldMapping'))
 else:
     fieldmap = dict(conf.items('JDFieldMapping'))
 
+TITLE_PIM_KEY = fieldmap['pimkey']
+TITLE_PIM_KEY_TYPE = fieldmap['pimkey_type']
+TITLE_PIM_VCODE = fieldmap['pim_vcode']
+TITLE_SCHEMA_CODE = fieldmap['schemaCode']
+PIM_MULTIPLE = fieldmap['multiple']
+PIM_POSITION = fieldmap['position']
+PIM_INPUT = fieldmap['pimkey_input']
+PIM_SINGLE_CHECK = fieldmap['pimkey_single_check']
+PIM_MULTI_CHECK = fieldmap['pimkey_multi_check']
 
-def get_product(pcode, schemaCode, channel, brand='Reebok'):
+# target title
+TITLE_TARGET_KEY = fieldmap['target_key']
+TITLE_TARGET_TYPE = fieldmap['target_type']
+TITLE_TARGET_VCODE = fieldmap['target_vcode']
+TITLE_TARGET_VALUE = fieldmap['target_value']
+TITLE_TARGET_SCHEMA_CODE = fieldmap['target_schemaCode']
+TARGET_SINGLE_CHECK = fieldmap['targetkey_single_check']
+TARGET_MULTI_CHECK = fieldmap['targetkey_multi_check']
+TARGET_INPUT = fieldmap['targetkey_input']
+
+
+def gen_product_body(pcode, schemaCode, channel, skus=[], brand='Reebok'):
     return {
         "operatorId": "jm006826",
         "master": {
@@ -87,7 +110,7 @@ def get_product(pcode, schemaCode, channel, brand='Reebok'):
         "variants": [
             {
                 "schemaCode": schemaCode,
-                "variantCode": "sku1_{}".format(pcode),
+                "variantCode": skus[0],
                 "properties": {
                     "customColor": {
                         "customColorID": "customColorID1",
@@ -97,14 +120,14 @@ def get_product(pcode, schemaCode, channel, brand='Reebok'):
                     "color": "",
                     "customSize": "size1",
                     "saleLocation": "",
-                    "platformCode": "pf1_{}".format(pcode),
+                    "platformCode": "p1_{}".format(pcode),
                     "skuTagPrice": "",
                     "skuCode": ""
                 }
             },
             {
                 "schemaCode": schemaCode,
-                "variantCode": "sku2_{}".format(pcode),
+                "variantCode": skus[1],
                 "properties": {
                     "customColor": {
                         "customColorID": "customColorID2",
@@ -114,7 +137,7 @@ def get_product(pcode, schemaCode, channel, brand='Reebok'):
                     "color": "",
                     "customSize": "size2",
                     "saleLocation": "",
-                    "platformCode": "pf2_{}".format(pcode),
+                    "platformCode": "p2_{}".format(pcode),
                     "skuTagPrice": "",
                     "skuCode": ""
                 }
@@ -126,30 +149,26 @@ def get_product(pcode, schemaCode, channel, brand='Reebok'):
     }
 
 
-def gen_pending_item(schema, row, vcode, target_vcode=None, target_value=None, target_schema=None):
-    '''
-    有缺失字段
-    :param schema:
-    :param row:
-    :param vcode: 天猫字段
-    :param target_vcode: 天猫属性值key
-    :param kwargs:
-    :return:
-    '''
-    return {
-        "origin": {
-            'schemaCode': schema,
-            'key': row[fieldmap.get('pimkey')],
-            'vcode': vcode,
-            'type': row[fieldmap.get('pimkey_type')],
-            'multiple': row[fieldmap.get('multiple')],
-            'position': row.get(fieldmap.get('position')),  # None if not supported
-        },
-        'target': {
-            'schemaCode': target_schema,
-            'key': row[fieldmap.get('target_key')],  # 京东字段
-            'type': row[fieldmap.get('target_type')],  # 京东字段类型
-            'vcode': target_vcode,  # 京东属性值key
-            'value': target_value  # 京东属性值value
+class Task():
+
+    def __init__(self, schema, row: dict, vcode, target_vcode=None, target_value=None, target_schema=None):
+        self.item = {
+            "origin": {
+                'schemaCode': schema,
+                'key': row[TITLE_PIM_KEY],
+                'vcode': vcode,
+                'type': row[TITLE_PIM_KEY_TYPE],
+                'multiple': row[PIM_MULTIPLE],
+                'position': row.get(PIM_POSITION),  # None if not supported
+            },
+            'target': {
+                'schemaCode': target_schema,
+                'key': row[TITLE_TARGET_KEY],  # 京东字段
+                'type': row[TITLE_TARGET_TYPE],  # 京东字段类型
+                'vcode': target_vcode,  # 京东属性值key
+                'value': target_value  # 京东属性值value
+            }
         }
-    }
+
+    def run(self):
+        pass

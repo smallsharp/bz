@@ -34,7 +34,7 @@ class DBTool:
         q_where = ''
         if where:
             cols = []
-            for k, v in where.items():
+            for k, v in where.task_items():
                 cols.append(k + '=%s')
                 param_list.append(v)
             q_where = ' WHERE ' + ' AND '.join(cols)
@@ -56,7 +56,7 @@ class DBTool:
         param_list = []
         placeholder_list = []
 
-        for k, v in value.items():
+        for k, v in value.task_items():
             column_list.append(k)
             param_list.append(v)
             placeholder_list.append('%s')
@@ -77,10 +77,10 @@ class DBTool:
         where_column_list = []
         param_list = []
 
-        for k, v in value.items():
+        for k, v in value.task_items():
             value_column_list.append(k + '=%s')
             param_list.append(v)
-        for k, v in where.items():
+        for k, v in where.task_items():
             where_column_list.append(k + '=%s')
             param_list.append(v)
 
@@ -110,7 +110,7 @@ class DBTool:
     def d(self, table, where):
         column_list = []
         param_list = []
-        for k, v in where.items():
+        for k, v in where.task_items():
             column_list.append(k + '=%s')
             param_list.append(v)
 
