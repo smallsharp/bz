@@ -1,20 +1,18 @@
 # coding=utf8
 from common.tool import ExcelTool
 import os
+import time
 import json
+import random
 from pim.check import const
 from pim.check.const import *
-import time
 from itertools import groupby
-import random
 from pim.check import service
-
-skipsheet = ['s10102-属性值', 's10101-属性值', 's10103-属性值', 's10106-属性', 's10107-属性值', 's10108-属性值', 'f101-属性值', 'f101-属性',
-             's10201-属性值', 's10301-属性值']
-
 import logging
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+skipsheet = []
 
 
 class Report(object):
@@ -64,7 +62,7 @@ class Check():
 
     def loadfile(self, filepath):
         ext = ExcelTool(filepath)
-        for sheetname in ext.sheetnames:
+        for sheetname in ext.get_all_sheet():
             # 过滤出 以属性结尾的sheet
             if not sheetname.endswith('属性') or sheetname in skipsheet:
                 continue
@@ -80,12 +78,12 @@ class Check():
                 if not merged_row[TITLE_PIM_KEY] or not merged_row[TITLE_TARGET_KEY]:
                     continue
                 # 属性sheet中 使用到的字段
-                schema = merged_row[TITLE_SCHEMA_CODE]
+                schema = merged_row[TITLE_SCHEMACODE]
                 pim_key = merged_row[TITLE_PIM_KEY]  # 属性键值
                 pim_type = merged_row[TITLE_PIM_KEY_TYPE]  # 属性类型
                 target_key = merged_row[TITLE_TARGET_KEY]  # 京东字段|天猫字段
                 target_type = merged_row[TITLE_TARGET_TYPE]
-                target_schema = merged_row[TITLE_TARGET_SCHEMA_CODE]  # 终端类目
+                target_schema = merged_row[TITLE_TARGET_SCHEMACODE]  # 终端类目
                 if pim_type == PIM_INPUT:
                     seed = random.randrange(1, 9999, step=1)
                     task = Task(schema, merged_row, vcode=str(seed), target_vcode=str(seed))
@@ -138,6 +136,30 @@ class Check():
                     else:
                         self.logger.warning('未知的选择类型：{}'.format(pim_type))
 
+    def load_vip_file(self, filepath):
+        '''
+        解析vip 数据模板
+        :param filepath:
+        :return:
+        '''
+
+        rowlist = list()
+        ext = ExcelTool(filepath)
+
+        # 获取sheet中的所有数据（包括第一行）
+        sheet_values = ext.get_sheet_values("唯品会全属性", skiplines=0)
+
+        for i in range(0, ext.getsheet("唯品会全属性").max_row - 1):
+            merged_row = ext.merge_list(sheet_values, idx_krow=0, idx_vrow=i + 1)
+            rowlist.append(merged_row)
+
+        # 过滤出 需要的数据
+        r1 = filter(lambda x: x[TITLE_PIM_KEY] is not None, rowlist)
+        r1 = filter(lambda x: x[TITLE_TARGET_KEY] is not None, r1)
+        r1 = filter(lambda x: x[TITLE_TARGET_VCODE] is not None, r1)
+
+        return list(r1)
+
     def get_merged_rows(self, ext: ExcelTool, sheetname):
         '''遍历属性值结尾的sheet, 合并成dict的形式，然后追加到list中，需要过滤掉<pim key>为空, 或<京东字段|天猫字段> key为空'''
         if not (sheet := ext.getsheet(sheetname)):
@@ -169,20 +191,22 @@ class Check():
 
         randomstr = random.randrange(1000, 9999, step=1)
         pcode = self.generate_product_code(schema, key, randomstr=randomstr)  # 生成product_code
-        sku1 = 'sku1_{}'.format(pcode)
-        sku2 = 'sku2_{}'.format(pcode)
-        pbody = const.gen_product_body(pcode, schema, channel=self.channel, skus=[sku1, sku2], brand=const.BRAND)
+        # sku1 = 'sku1_{}'.format(pcode)
+        # sku2 = 'sku2_{}'.format(pcode)
+        # pbody = const.gen_product_body(pcode, schema, channel=self.channel, skus=[sku1, sku2], brand=const.BRAND)
+
+        reqbody = const.gen_ts_body(pcode, schema)
 
         # 区分属性放到master 还是 variants
         if position == "SKU" or const.SUB_POSITION.get(key) == "SKU":
-            self.set_value(pbody['variants'][0]['properties'], key, vcode)
+            self.set_value(reqbody['variants'][0]['properties'], key, vcode)
             position = 'SKU'
         else:
-            self.set_value(pbody['master']['properties'], key, vcode)
+            self.set_value(reqbody['master']['properties'], key, vcode)
             position = 'SPU'  ## 后续需要用到
         # 创建、发布商品
-        self.logger.info(json.dumps(pbody, ensure_ascii=False))
-        service.create_product(pbody)
+        self.logger.info(json.dumps(reqbody, ensure_ascii=False))
+        service.create_product(reqbody)
         self.logger.info('productCode:{},创建成功'.format(pcode))
 
         service.release_product(pcode)
@@ -234,19 +258,46 @@ class Check():
     def run(self):
         self.logger.info('start run')
         start = time.time()
-        filelist = os.listdir('files/G2000')
+
+        folder = "files/TS"
+        filelist = os.listdir(folder)
         ext = ExcelTool()
         for index, filename in enumerate(filelist):
             # self.logger.info(f'开始解析文件：{filename}')
-            filepath = os.path.abspath(os.path.join(os.path.dirname(__file__), './files/G2000/{}'.format(filename)))
+            filepath = os.path.abspath(os.path.join(os.path.dirname(__file__), './{}/{}'.format(folder, filename)))
             self.logger.info('load file:{}'.format(filepath))
-            self.loadfile(filepath)
+
+            # 第一阶段,解析Excel
+            # self.loadfile(filepath)
+            filedata = self.load_vip_file(filepath)
+            # print(json.dumps(filedata, ensure_ascii=False))
             self.logger.info('load file over')
-            filename = "report_g2000.xlsx"
+
+            print(len(filedata))
+
+            # 第二阶段，拼装task_item数据
+            for item in filedata:
+                # print(item)
+                # print(item.get(TITLE_PIM_VCODE))
+                task = Task()
+                task.row = item
+                task.schema = item.get(TITLE_SCHEMACODE)
+                task.vcode = item.get(TITLE_PIM_VCODE)
+                task.target_schema = item.get(TITLE_TARGET_SCHEMACODE)
+                task.target_vcode = item.get(TITLE_TARGET_VCODE)
+                task.target_vcode = item.get(TITLE_TARGET_VALUE)
+
+                self.task_items.append(task.__get_task_item())
+
+            # print(json.dumps(self.task_items[0], ensure_ascii=False))
+
+            filename = "report.xlsx"
             # 标题
             ext.write_data(filename, f'report{index}', datas=Report().get_keys())
             error_count = 0
             self.logger.info(f'开始执行格式化数据..')
+
+            # 第三阶段
             for item in self.task_items:
                 try:
                     report = self.parser(item)

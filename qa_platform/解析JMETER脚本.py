@@ -7,28 +7,24 @@ import copy
 
 class QAPlatform():
 
-    def __init__(self, filename='test.jmx', login_script_id=None):
+    def __init__(self, filename=None, login_script_id=None):
         self.filename = filename
         self.moduleId = 522
         self.login_script_id = login_script_id  # 5117
         self.headers = {
-            'Cookie': 'JSESSIONID=660DCD34409769B5D0128D76B1E6C14B'
+            'Cookie': 'JSESSIONID=6BAF73B2CDB13CCA2759DFB095E80A37'
         }
-
         self.model_controllers = []
+
+        self.remove_prefix = ['/pim-workbench-bff', '/pim-core', '/pim-query']
 
     def parser_jmx(self):
 
         html = etree.parse(self.filename)
-        # 提取所有 启用的事务控制器标签
-        controllers = html.xpath('//TransactionController[@enabled="true"]')
-        # print(f'事务控制器的数量:{len(controllers)}')
-
-        # 自定义变量
-        # customargs = html.xpath('//ThreadGroup/following-sibling::hashTree[1]/Arguments')
-        # print(len(customargs))
-        # for arg in customargs:
-        #     print(arg.get('testname'))
+        # 提取所有 已启用的事务控制器标签
+        controllers = html.xpath(
+            '//ThreadGroup[@enabled="true"]/following-sibling::hashTree[1]/TransactionController[@enabled="true"]')
+        print(f'已启用的事务控制器数量:{len(controllers)}')
 
         for controller in controllers:
             model_controller = copy.deepcopy(template.model_controller)
@@ -41,6 +37,7 @@ class QAPlatform():
             print(f'当前用例：{controller.get("testname")}')
 
             for httpsampler in httpsamplers:
+                # 获取每个步骤的详情
                 step = self.get_step_info(httpsampler)
                 model_controller['stepList'].append(step)
                 print('-' * 32)
@@ -89,33 +86,39 @@ class QAPlatform():
 
     def get_assertion_list(self, httpsampler):
         # 1. json断言
-        json_assertions = httpsampler.xpath('./following-sibling::hashTree[1]/JSONPathAssertion')
+        json_assertions = httpsampler.xpath('./following-sibling::hashTree[1]/JSONPathAssertion[@enabled="true"]')
         print(f'当前请求的断言数量:{len(json_assertions)}')
 
         assertion_list = list()
-        for ast in json_assertions:
-            json_path = ast.find('./stringProp[@name=\"JSON_PATH\"]').text
-            EXPECTED_VALUE = ast.find('./stringProp[@name=\"EXPECTED_VALUE\"]').text
-            # JSON_VALIDATION = assertion.find('./boolProp[@name=\"JSONVALIDATION\"]').text
+        for assert_ in json_assertions:
+            JSON_PATH = assert_.find('./stringProp[@name=\"JSON_PATH\"]').text
+            EXPECTED_VALUE = assert_.find('./stringProp[@name=\"EXPECTED_VALUE\"]').text
+            JSON_VALIDATION = assert_.find('./boolProp[@name=\"JSONVALIDATION\"]').text
+
+            ## 是否需要断言值，是则断言EXPECTED_VALUE,赋值value, 否则只断言JSON_PATH，赋值（.*）
+            if JSON_VALIDATION != 'true':
+                EXPECTED_VALUE = '(.*)'
+
             # EXPECT_NULL = assertion.find('./boolProp[@name=\"EXPECT_NULL\"]').text
             # INVERT = assertion.find('./boolProp[@name=\"INVERT\"]').text
             # ISREGEX = assertion.find('./boolProp[@name=\"ISREGEX\"]').text
             assertion = copy.deepcopy(template.assertion)
             assertion['value'] = EXPECTED_VALUE
-            assertion['path'] = json_path
-            assertion['description'] = ast.get('testname')
+            assertion['path'] = JSON_PATH
+            assertion['description'] = assert_.get('testname')
             assertion_list.append(assertion)
+            print(assert_.get('testname'), json.dumps(assertion, ensure_ascii=False))
 
         # 2. json 提取器
-        json_extractors = httpsampler.xpath('./following-sibling::hashTree/JSONPostProcessor')
+        json_extractors = httpsampler.xpath('./following-sibling::hashTree[1]/JSONPostProcessor[@enabled="true"]')
         print(f'当前请求的json提取器数量:{len(json_extractors)}')
         for index, extractor in enumerate(json_extractors):
-            json_path = extractor.find('./stringProp[@name=\"JSONPostProcessor.jsonPathExprs\"]').text
+            JSON_PATH = extractor.find('./stringProp[@name=\"JSONPostProcessor.jsonPathExprs\"]').text
             export = extractor.find('./stringProp[@name=\"JSONPostProcessor.referenceNames\"]').text
             assertion = copy.deepcopy(template.assertion)  # assertion = dict.copy(template.assertion)
             assertion['value'] = '(.*)'
-            assertion['path'] = json_path
-            assertion['description'] = json_path
+            assertion['path'] = JSON_PATH
+            assertion['description'] = JSON_PATH
             assertion['export'] = export
             assertion_list.append(assertion)
             # print(f'index:{index + 1},json_path:{json_path}')
@@ -123,7 +126,7 @@ class QAPlatform():
         # print(json.dumps(assertion_list))
         return assertion_list
 
-    def get_step_info(self, httpsampler, remove_prefix='/pim-workbench-bff'):
+    def get_step_info(self, httpsampler):
         '''
         :param httpsampler: 是一个完整的http请求
         :param remove_prefix: 接口path中需要去掉的前缀
@@ -138,8 +141,10 @@ class QAPlatform():
         port = httpsampler.find('./stringProp[@name=\"HTTPSampler.port\"]').text
         body = httpsampler.find('.//stringProp[@name=\"Argument.value\"]').text
 
-        if str(path).startswith(remove_prefix):
-            path = str(path).replace(remove_prefix, '')
+        for prefix in self.remove_prefix:
+            if str(path).startswith(prefix):
+                path = str(path).replace(prefix, '')
+                break
 
         # 获取当前请求的 json断言 和 json其提取数据
         assertionList = self.get_assertion_list(httpsampler)
@@ -180,10 +185,10 @@ class QAPlatform():
         self.parser_jmx()
         print('解析完成')
 
-        for body in self.model_controllers:
-            self.save_script(body)
+        # for body in self.model_controllers:
+        #     self.save_script(body)
 
 
 if __name__ == '__main__':
-    qa = QAPlatform(filename='pim回归测试.jmx')
+    qa = QAPlatform(filename='test.jmx')
     qa.run()

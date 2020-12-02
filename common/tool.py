@@ -92,9 +92,12 @@ class ExcelTool:
     def __load_workbook(self):
         if self.__filepath:
             self.workbook = load_workbook(self.__filepath)
-            self.sheetnames = self.workbook.sheetnames
+            # self.sheetnames = self.workbook.sheetnames
         else:
             self.workbook = Workbook()
+
+    def get_all_sheet(self):
+        return self.workbook.sheetnames
 
     def merge_dict(self, sheetname, dictname='dictname', merge_column='1', value_column=2, skiplines=1):
         '''
@@ -169,8 +172,9 @@ class ExcelTool:
         :param skiplines: lines to skip, like skip 2 line;
         :return: 如上格式 行列表
         '''
-        sheet = self.workbook[sheetname]
-        values = list(sheet.values)  # generator > list
+        ws = self.workbook.get_sheet_by_name(sheetname)
+
+        values = list(ws.values)  # generator > list
         if skiplines > len(values):
             raise ValueError('there is no more lines to skip!')
         return values[skiplines:]

@@ -1,30 +1,31 @@
-from pim.check import const
+from openpyxl import load_workbook
+import time
 
-# def set_value(propertiesObj, key, value):
-#     for word in key.split('.'):
-#         obj = propertiesObj.get(word, value)
-#         if isinstance(obj, (str, int, float)):
-#             propertiesObj[word] = value
-#         else:
-#             propertiesObj = obj
-#
-#
-# pp = {
-#     'a': '1',
-#     'b': {
-#         'x1': 'xx1'
-#     }
-# }
-#
-# set_value(pp, 'b.x2', '22')
-#
-# print(pp)
-#
-# s1 = ('a', 'b')
-# s2 = ('1', '2')
-# print(list(zip(s1, s2)))
-# print(dict(zip(s1, s2)))
+start = time.time()
 
-a, b = 1, 2
+wb = load_workbook('./files/TM_CommonToRoss.xlsx')
+ws = wb['0 运动-运动鞋-羽毛球鞋']
 
-print(a, b)
+# for row in ws.iter_rows():
+#     print(row)
+from openpyxl.cell.cell import Cell
+from openpyxl.cell.cell import MergedCell
+from openpyxl.worksheet import worksheet
+
+for row in ws.iter_rows(min_row=2, values_only=True):
+    print(row)
+    # for cell in row:
+    #     # print(cell.value)
+    #     print(cell)
+    # pass
+
+# for row in ws.values:
+#     print(row)
+
+end = time.time()
+
+print(end - start)
+# items = [1, 2, 3, 4, 5]
+#
+# for item in items[:3]:
+#     print(item)
