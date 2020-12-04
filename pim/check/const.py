@@ -306,8 +306,8 @@ class Report(object):
         if str(self.task_item['target']['schemaCode']) == str(self.task_item['actual']['schemaCode']):
             self.task_item['report']['schemaCode'] = 'success'
 
-    @classmethod
-    def headers(cls):
+    @staticmethod
+    def headers():
         '''
         报告的头
         '''

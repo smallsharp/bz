@@ -20,50 +20,84 @@ class Check():
 
     def __init__(self):
         self.logger = logging.getLogger(Check.__name__)
-        self.channel = CHANNEL  # 根据不同渠道，判断如何查商品（商品家接不同平台接口名称不同）
-        self.task_items = []
+        self.__setup()
 
-    # def __get_task_item(self):
-    #     # origin 赋值
-    #     self.item['origin']['schemaCode'] = self.row.get(TITLE_SCHEMACODE)
-    #     self.item['origin']['schemaPath'] = self.row.get(TITLE_SCHEMA_PATH)
-    #     self.item['origin']['key'] = self.row.get(TITLE_PIM_KEY)
-    #     self.item['origin']['vcode'] = self.row.get(TITLE_PIM_VCODE)
-    #     # self.item['origin']['type'] = self.row.get(TITLE_PIM_KEY_TYPE)
-    #     # self.item['origin']['multiple'] = self.row.get(PIM_MULTIPLE)
-    #     # self.item['origin']['position'] = self.row.get(PIM_POSITION)
-    #
-    #     # target 赋值
-    #     self.item['target']['schemaCode'] = self.row.get(TITLE_TARGET_SCHEMACODE)
-    #     self.item['target']['key'] = self.row.get(TITLE_TARGET_KEY)
-    #     self.item['target']['type'] = self.row.get(TITLE_TARGET_TYPE)
-    #     self.item['target']['vcode'] = self.row.get(TITLE_TARGET_VCODE)
-    #     self.item['target']['value'] = self.row.get(TITLE_TARGET_VALUE)
+    def __setup(self):
+        '''
+         1. get filerows from excel, and merge title and other row, merged rows like follows:
+         [{
+            "TS类目": "童鞋-儿童凉鞋-沙滩凉鞋",
+            "TS类目ID": "TS030202",
+            "平台类目": "母婴鞋服/童鞋/儿童凉鞋",
+            "平台类目ID": 391185,
+            "TS类目属性": "*商品名称",
+            "TS类目属性ID": "itemName",
+            "TS类目属性值": null,
+            "TS类目属性值ID": null,
+            "平台类目属性": "商品",
+            "平台类目属性ID": null,
+            "平台类目属性值": null,
+            "平台类目属性值ID": null
+        }]
+
+         2. convert merged rows to task rows(cause different excel has different data), task rows refer to "self.__item"
+
+        '''
+        self.channel = const.CHANNEL  # 根据不同渠道，判断如何查商品（商品家接不同平台接口名称不同）
+        self.filerows = self.load_vip_excel('./files/TS/vip_mapping.xlsx')
+        self.items = self.__load_task_items(self.filerows)
+        self.logger.info('load file over, length of items is :{}'.format(len(self.items)))
+
+    @staticmethod
+    def __covert_row2item(row: dict):
+        '''
+          convert merged row to task item row, refer to "const.get_item_model()"
+        '''
+        item = const.get_item_model()
+        # origin 赋值
+        item['origin']['schemaCode'] = row.get(TITLE_SCHEMACODE)
+        item['origin']['schemaPath'] = row.get(TITLE_SCHEMA_PATH)
+        item['origin']['key'] = row.get(TITLE_PIM_KEY)
+        item['origin']['vcode'] = row.get(TITLE_PIM_VCODE)
+        # item['origin']['type'] = self.row.get(TITLE_PIM_KEY_TYPE)
+        # item['origin']['multiple'] = self.row.get(PIM_MULTIPLE)
+        # item['origin']['position'] = self.row.get(PIM_POSITION)
+
+        # target 赋值
+        item['target']['schemaCode'] = row.get(TITLE_TARGET_SCHEMACODE)
+        item['target']['key'] = row.get(TITLE_TARGET_KEY)
+        item['target']['type'] = row.get(TITLE_TARGET_TYPE)
+        item['target']['vcode'] = row.get(TITLE_TARGET_VCODE)
+        item['target']['value'] = row.get(TITLE_TARGET_VALUE)
+        return item
+
+    def __load_task_items(self, merged_file_rows):
+        return [self.__covert_row2item(row) for row in merged_file_rows]
 
     def load_vip_excel(self, filepath):
         '''
-        每个人给的模板都不一样，需要单独解析
-        :param filepath:
-        :return:
+          load file and merge row to dict
         '''
         ext = ExcelTool(filepath)
-
-        # 获取sheet中的所有数据（包括第一行）
-        sheet_values = ext.get_sheet_values("唯品会全属性", skiplines=0)
-        rowlist = list()
-        for i in range(0, ext.getsheet("唯品会全属性").max_row - 1):
-            merged_row = ext.merge_list(sheet_values, idx_krow=0, idx_vrow=i + 1)
-            rowlist.append(merged_row)
+        ws = ext.get_worksheet("唯品会全属性")
+        sheet_values = list(ext.get_sheet_values2(ws))
+        # print(json.dumps(sheet_values, ensure_ascii=False))
+        filerows = list()
+        for i in range(0, ws.max_row - 1):
+            merged_row = ext.merge_list(sheet_values, idx_key_row=0, idx_value_row=i + 1)
+            filerows.append(merged_row)
 
         # 过滤出 需要的数据
         # r1 = filter(lambda x: x[TITLE_PIM_KEY] is not None, rowlist)
         # r1 = filter(lambda x: x[TITLE_TARGET_KEY] is not None, r1)
         # r1 = filter(lambda x: x[TITLE_TARGET_VCODE] is not None, r1)
         # return list(r1)
-        return rowlist
+        return filerows
 
     def parser(self, taskitem):
-        '''解析数据item数据，格式参考task_items.json'''
+
+        # 解析数据item数据，格式参考task_items.json
+        self.logger.info(f'正在解析:{taskitem}')
         # self.logger.info('正在处理==>>:{}'.format(json.dumps(taskitem, ensure_ascii=False)))
         # 序列解包
         schemaCode, schemaPath, key, vcode, _, _, position = taskitem['origin'].values()
@@ -75,6 +109,7 @@ class Check():
         sku2 = 'K2_{}'.format(pcode)
         # 获取滔博的商品参数
         payload = const.gen_ts_body(pcode, schemaCode, schemaPath, skus=[sku1, sku2])
+        taskitem['actual']['productCode'] = pcode
 
         # 区分属性放到master 还是 variants
         if position == "SKU" or const.SUB_POSITION.get(key) == "SKU":
@@ -83,16 +118,13 @@ class Check():
         else:
             self.set_value(payload['master']['properties'], key, vcode)
             position = 'SPU'  ## 后续需要用到
+
         # 创建、发布商品
         service.create_product(payload)
         service.release_product(pcode)
 
-        taskitem['actual']['productCode'] = pcode
-
-        # 获取商品家的 商品id
         if self.channel == 'TM':
-            pid = service.get_tm_pid(pcode)
-            # 调用商品家详情接口 获取数据
+            pid = service.get_tm_pid(pcode)  # 获取商品家的 商品id
             actual_vcode, actual_type = service.get_tm_value(pid, target_key)
             remark = ''
 
@@ -107,7 +139,6 @@ class Check():
             except Exception as e:
                 # 记录请求的异常
                 taskitem['actual']['remark'] = str(e)
-
         else:
             # pid = service.get_jd_pid(pcode)
             # self.logger.info(f'position:{position}')
@@ -118,23 +149,15 @@ class Check():
             taskitem['actual']['remark'] = response.get('remark')
 
         report = Report(taskitem)
-
-        print('taskItem:{}'.format(json.dumps(taskitem, ensure_ascii=False)))
-
         return report.values()
 
-    def generate_product_code(self, schemaCode, key, randomstr):
-        '''
-        productCode 生成规则
-        :param schemaCode:
-        :param key:
-        :param randomstr:
-        :return:
-        '''
+    @staticmethod
+    def generate_product_code(schemaCode, key, randomstr):
         t = time.strftime("%m%d", time.localtime())
         return f'{schemaCode}_{t}_{key}_{randomstr}'
 
-    def set_value(self, propertiesObj, key, value):
+    @staticmethod
+    def set_value(propertiesObj, key, value):
         for word in key.split('.'):
             obj = dict(propertiesObj).get(word, value)
             if isinstance(obj, (str, int, float, list)):  # 取出的值是基本数据类型
@@ -168,7 +191,7 @@ class Check():
             # 第二阶段，拼装可执行的格式化 task_item数据 ###todo
             for row in filerows:
                 task = Task(row=row)
-                self.task_items.append(task.item)
+                self.items.append(task.item)
 
             filename = "report4.xlsx"
             ext.write_data(filename, f'report{index}', datas=Report().headers())  # 标题
@@ -176,7 +199,7 @@ class Check():
 
             # 第三阶段
             self.logger.info(f'开始执行任务...')
-            for taskitem in self.task_items:
+            for taskitem in self.items:
                 # print('正在解析：{}'.format(json.dumps(taskitem, ensure_ascii=False)))
                 try:
                     report = self.parser(taskitem)
@@ -194,4 +217,11 @@ class Check():
 
 if __name__ == '__main__':
     ck = Check()
-    ck.run()
+    from multiprocessing.dummy import Pool
+    # 实例化线程池
+    pool = Pool(1)
+
+    # Apply `func` to each element in `iterable`, collecting the results in a list that is returned.
+    result = pool.map(ck.parser, ck.items)
+    pool.close()
+    pool.join()

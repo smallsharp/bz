@@ -4,6 +4,10 @@ from openpyxl import load_workbook
 from openpyxl import Workbook
 import json
 
+from openpyxl.cell.cell import Cell
+from openpyxl.cell.cell import MergedCell
+from openpyxl.worksheet import worksheet
+
 
 class GeneralTool:
 
@@ -92,12 +96,50 @@ class ExcelTool:
     def __load_workbook(self):
         if self.__filepath:
             self.workbook = load_workbook(self.__filepath)
-            # self.sheetnames = self.workbook.sheetnames
         else:
             self.workbook = Workbook()
 
-    def get_all_sheet(self):
+    def get_worksheet(self, name):
+        return self.workbook[name]
+
+    def get_sheetnames(self):
         return self.workbook.sheetnames
+
+    def get_merged_cell_value(self, ws: worksheet, cell: Cell):
+        '''
+        获取 合并的单元格数据，如果单元格没值，则递归向上一个单元格取值
+        '''
+        if isinstance(cell, MergedCell) and cell.value is None:
+            return self.get_merged_cell_value(ws, ws.cell(cell.row - 1, cell.column))
+        return cell.value
+
+    def get_sheet_values(self, sheetname, skiplines=1):
+        '''
+        [('9759', 's1011713', None, 'customSize'), ('9759', 's1011713', 'customcolor.customcolorname', None)]
+        :param sheetname:
+        :param skiplines: lines to skip, like skip 2 line;
+        :return: 如上格式 行列表
+        '''
+        ws = self.workbook.get_sheet_by_name(sheetname)
+
+        values = list(ws.values)  # generator > list
+        if skiplines > len(values):
+            raise ValueError('there is no more lines to skip!')
+        return values[skiplines:]
+
+    def get_sheet_values2(self, ws: worksheet, min_row=None, max_row=None, min_col=None, max_col=None):
+        '''
+        :param ws: worksheet
+        :param min_row:
+        :param max_row:
+        :param min_col:
+        :param max_col:
+        :return: generator
+        '''
+        for row in ws.iter_rows(min_row, max_row, min_col, max_col, values_only=False):
+            # cells = (ws.cell(row=row, column=column) for column in range(min_col, max_col + 1))
+            v = [self.get_merged_cell_value(ws, cell) for cell in row]
+            yield v
 
     def merge_dict(self, sheetname, dictname='dictname', merge_column='1', value_column=2, skiplines=1):
         '''
@@ -165,20 +207,6 @@ class ExcelTool:
             schemalist.append(obj)
         return schemalist
 
-    def get_sheet_values(self, sheetname, skiplines=1):
-        '''
-        [('9759', 's1011713', None, 'customSize'), ('9759', 's1011713', 'customcolor.customcolorname', None)]
-        :param sheetname:
-        :param skiplines: lines to skip, like skip 2 line;
-        :return: 如上格式 行列表
-        '''
-        ws = self.workbook.get_sheet_by_name(sheetname)
-
-        values = list(ws.values)  # generator > list
-        if skiplines > len(values):
-            raise ValueError('there is no more lines to skip!')
-        return values[skiplines:]
-
     @classmethod
     def write(cls, datas: list, title, startrow=1, startcol=1, filename='myexcel.xlsx',
               sheetname='report'):
@@ -225,9 +253,6 @@ class ExcelTool:
         sheet.append([str(item) for item in datas])
         self.workbook.save(filename)
 
-    def getsheet(self, sheetname):
-        return self.workbook[sheetname]
-
     def merge_row(self, sheetname, idx_keyrow=0, idx_valuerow=1, skip_lines=0):
         '''
         :param sheetname:
@@ -238,14 +263,14 @@ class ExcelTool:
         values = self.get_sheet_values(sheetname, skiplines=skip_lines)
         return dict(zip(values[idx_keyrow], values[idx_valuerow]))
 
-    def merge_list(self, valuelist, idx_krow=0, idx_vrow=1):
+    def merge_list(self, valuelist, idx_key_row=0, idx_value_row=1):
         '''
         :param sheetname:
-        :param idx_krow: 第几行作为key 行
+        :param idx_key_row: 第几行作为key 行
         :param skip_lines:
         :return: key:value 字典数据
         '''
-        return dict(zip(valuelist[idx_krow], valuelist[idx_vrow]))
+        return dict(zip(valuelist[idx_key_row], valuelist[idx_value_row]))
 
 
 class CommonTool():

@@ -62,7 +62,7 @@ class Check():
 
     def loadfile(self, filepath):
         ext = ExcelTool(filepath)
-        for sheetname in ext.get_all_sheet():
+        for sheetname in ext.get_sheetnames():
             # 过滤出 以属性结尾的sheet
             if not sheetname.endswith('属性') or sheetname in skipsheet:
                 continue
@@ -72,8 +72,8 @@ class Check():
             sheetname2 = sheetname.replace('属性', '属性值')
             att_value_list = self.get_merged_rows(ext, sheetname2)  # 属性值对象 列表
             # 遍历 <属性sheet>
-            for i in range(0, ext.getsheet(sheetname).max_row - 1):
-                merged_row = ext.merge_list(att_sheet_values, idx_krow=0, idx_vrow=i + 1)
+            for i in range(0, ext.get_worksheet(sheetname).max_row - 1):
+                merged_row = ext.merge_list(att_sheet_values, idx_key_row=0, idx_value_row=i + 1)
                 # 跳过 pim.key|target.key is none
                 if not merged_row[TITLE_PIM_KEY] or not merged_row[TITLE_TARGET_KEY]:
                     continue
@@ -149,8 +149,8 @@ class Check():
         # 获取sheet中的所有数据（包括第一行）
         sheet_values = ext.get_sheet_values("唯品会全属性", skiplines=0)
 
-        for i in range(0, ext.getsheet("唯品会全属性").max_row - 1):
-            merged_row = ext.merge_list(sheet_values, idx_krow=0, idx_vrow=i + 1)
+        for i in range(0, ext.get_worksheet("唯品会全属性").max_row - 1):
+            merged_row = ext.merge_list(sheet_values, idx_key_row=0, idx_value_row=i + 1)
             rowlist.append(merged_row)
 
         # 过滤出 需要的数据
@@ -162,12 +162,12 @@ class Check():
 
     def get_merged_rows(self, ext: ExcelTool, sheetname):
         '''遍历属性值结尾的sheet, 合并成dict的形式，然后追加到list中，需要过滤掉<pim key>为空, 或<京东字段|天猫字段> key为空'''
-        if not (sheet := ext.getsheet(sheetname)):
+        if not (sheet := ext.get_worksheet(sheetname)):
             self.logger.error('ERROR：sheetname not found <{}>'.format(sheetname))
         rowlist = list()
         sheet_values = ext.get_sheet_values(sheetname, skiplines=0)
         for i in range(0, sheet.max_row - 1):
-            dictrow = ext.merge_list(sheet_values, idx_krow=0, idx_vrow=i + 1)
+            dictrow = ext.merge_list(sheet_values, idx_key_row=0, idx_value_row=i + 1)
             rowlist.append(dictrow)
         # self.logger.info('end merge')
         r1 = filter(lambda x: x[TITLE_PIM_KEY] is not None, rowlist)
