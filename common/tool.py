@@ -94,13 +94,17 @@ class ExcelTool:
         self.__load_workbook()
 
     def __load_workbook(self):
-        if self.__filepath:
+        import os
+        if self.__filepath and os.path.exists(self.__filepath):
             self.workbook = load_workbook(self.__filepath)
         else:
             self.workbook = Workbook()
 
     def get_worksheet(self, name):
         return self.workbook[name]
+
+    def get_active_worksheet(self):
+        return self.workbook.active
 
     def get_sheetnames(self):
         return self.workbook.sheetnames
@@ -239,7 +243,7 @@ class ExcelTool:
         workbook.save(filename=filename)
         workbook.close()
 
-    def write_data(self, filename, sheetname, datas: list):
+    def write_data(self, sheetname, datas: list):
         '''
         :param filename:
         :param sheetname:
@@ -251,7 +255,7 @@ class ExcelTool:
 
         sheet = self.workbook[sheetname]
         sheet.append([str(item) for item in datas])
-        self.workbook.save(filename)
+        self.workbook.save(self.__filepath)
 
     def merge_row(self, sheetname, idx_keyrow=0, idx_valuerow=1, skip_lines=0):
         '''

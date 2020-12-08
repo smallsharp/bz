@@ -212,9 +212,9 @@ class Check():
         service.release_product(pcode)
         # 获取商品家的 商品id
         if self.channel == 'TM':
-            pid = service.get_tm_pid(pcode)
+            pid = service.get_product_id_tm(pcode)
             # 调用商品家详情接口 获取数据
-            actual_vcode, actual_type = service.get_tm_value(pid, target_key)
+            actual_vcode, actual_type = service.get_product_tm(pid, target_key)
             remark = ''
         else:
             # pid = service.get_jd_pid(pcode)
@@ -255,61 +255,61 @@ class Check():
             else:
                 propertiesObj = obj
 
-    def run(self):
-        self.logger.info('start run')
-        start = time.time()
-
-        folder = "files/TS"
-        filelist = os.listdir(folder)
-        ext = ExcelTool()
-        for index, filename in enumerate(filelist):
-            # self.logger.info(f'开始解析文件：{filename}')
-            filepath = os.path.abspath(os.path.join(os.path.dirname(__file__), './{}/{}'.format(folder, filename)))
-            self.logger.info('load file:{}'.format(filepath))
-
-            # 第一阶段,解析Excel
-            # self.loadfile(filepath)
-            filedata = self.load_vip_file(filepath)
-            # print(json.dumps(filedata, ensure_ascii=False))
-            self.logger.info('load file over')
-
-            print(len(filedata))
-
-            # 第二阶段，拼装task_item数据
-            for item in filedata:
-                # print(item)
-                # print(item.get(TITLE_PIM_VCODE))
-                task = Task()
-                task.row = item
-                task.schema = item.get(TITLE_SCHEMACODE)
-                task.vcode = item.get(TITLE_PIM_VCODE)
-                task.target_schema = item.get(TITLE_TARGET_SCHEMACODE)
-                task.target_vcode = item.get(TITLE_TARGET_VCODE)
-                task.target_vcode = item.get(TITLE_TARGET_VALUE)
-
-                self.task_items.append(task.__get_task_item())
-
-            # print(json.dumps(self.task_items[0], ensure_ascii=False))
-
-            filename = "report.xlsx"
-            # 标题
-            ext.write_data(filename, f'report{index}', datas=Report().get_keys())
-            error_count = 0
-            self.logger.info(f'开始执行格式化数据..')
-
-            # 第三阶段
-            for item in self.task_items:
-                try:
-                    report = self.parser(item)
-                    ext.write_data(filename, f'report{index}', list(report.values()))
-                except Exception as e:
-                    error_count += 1
-                    self.logger.error('出现异常：{}，detail==>>{}'.format(error_count, e))
-                    print(e.with_traceback())
-                if error_count >= 3:
-                    break
-        end = time.time()
-        self.logger.info(f"共耗时：{round(end - start, 2)}")
+    # def run(self):
+    #     self.logger.info('start run')
+    #     start = time.time()
+    #
+    #     folder = "files/ts"
+    #     filelist = os.listdir(folder)
+    #     ext = ExcelTool()
+    #     for index, filename in enumerate(filelist):
+    #         # self.logger.info(f'开始解析文件：{filename}')
+    #         filepath = os.path.abspath(os.path.join(os.path.dirname(__file__), './{}/{}'.format(folder, filename)))
+    #         self.logger.info('load file:{}'.format(filepath))
+    #
+    #         # 第一阶段,解析Excel
+    #         # self.loadfile(filepath)
+    #         filedata = self.load_vip_file(filepath)
+    #         # print(json.dumps(filedata, ensure_ascii=False))
+    #         self.logger.info('load file over')
+    #
+    #         print(len(filedata))
+    #
+    #         # 第二阶段，拼装task_item数据
+    #         for item in filedata:
+    #             # print(item)
+    #             # print(item.get(TITLE_PIM_VCODE))
+    #             task = Task()
+    #             task.row = item
+    #             task.schema = item.get(TITLE_SCHEMACODE)
+    #             task.vcode = item.get(TITLE_PIM_VCODE)
+    #             task.target_schema = item.get(TITLE_TARGET_SCHEMACODE)
+    #             task.target_vcode = item.get(TITLE_TARGET_VCODE)
+    #             task.target_vcode = item.get(TITLE_TARGET_VALUE)
+    #
+    #             self.task_items.append(task.__get_task_item())
+    #
+    #         # print(json.dumps(self.task_items[0], ensure_ascii=False))
+    #
+    #         filename = "../report/report.xlsx"
+    #         # 标题
+    #         ext.write_data(filename, f'report{index}', datas=Report().get_keys())
+    #         error_count = 0
+    #         self.logger.info(f'开始执行格式化数据..')
+    #
+    #         # 第三阶段
+    #         for item in self.task_items:
+    #             try:
+    #                 report = self.parser(item)
+    #                 ext.write_data(filename, f'report{index}', list(report.values()))
+    #             except Exception as e:
+    #                 error_count += 1
+    #                 self.logger.error('出现异常：{}，detail==>>{}'.format(error_count, e))
+    #                 print(e.with_traceback())
+    #             if error_count >= 3:
+    #                 break
+    #     end = time.time()
+    #     self.logger.info(f"共耗时：{round(end - start, 2)}")
 
 
 if __name__ == '__main__':

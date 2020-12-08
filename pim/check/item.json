@@ -1,0 +1,30 @@
+{
+    "origin": {
+        "schemaCode": "TS020205",
+        "schemaPath": "童装-儿童服装-吊带 背心",
+        "key": "gender",
+        "vcode": "zhongxing",
+        "type": "",
+        "position": "",
+        "brand": "AS01"
+    },
+    "target": {
+        "schemaCode": "50010524",
+        "key": "24477",
+        "type": null,
+        "vcode": "29923",
+        "value": "中性"
+    },
+    "actual": {
+        "schemaCode": null,
+        "type": null,
+        "vcode": null,
+        "value": null,
+        "remark": null,
+        "productCode": "TS020205_1207_gender_zhongxing_4289"
+    },
+    "report": {
+        "schemaCode": "failed",
+        "vcode": "failed"
+    }
+}

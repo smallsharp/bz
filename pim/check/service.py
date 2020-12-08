@@ -3,6 +3,7 @@ import requests
 from retry import retry
 from pim.check import const
 import urllib3
+import json
 
 urllib3.disable_warnings()
 requests.packages.urllib3.disable_warnings()
@@ -25,7 +26,7 @@ def create_product(template_product: dict):
         raise Exception('PIM 创建商品请求业务异常:{}'.format(res['code']))
 
 
-@retry(Exception, tries=20, delay=1)
+@retry(Exception, tries=5, delay=1)
 def release_product(product_code):
     url = "https://{}/pim-workbench-bff/pim-core/product/releaseLatestVersion".format(const.URL_PIM)
     body = {"operatorId": "jm006826", "productCode": product_code}
@@ -36,24 +37,58 @@ def release_product(product_code):
         raise Exception('PIM 发布商品请求业务异常:{}'.format(res['code']))
 
 
-@retry(Exception, tries=20, delay=1)
-def get_tm_pid(articleNo):
+@retry(Exception, tries=3, delay=1)
+def get_product_id_tm(articleNo, categoryId):
     # print('开始查询商品家ID:{}'.format(articleNo))
-    url = "https://{}/api/products?articleNo={}&exactMatch=1&pageSize=20&currentPage=1".format(const.URL_ROSS,
-                                                                                               articleNo)
-    response = requests.request("GET", url, headers=const.HEADERS_ROSS, verify=False)
+    # https://ross-api-uat.baozun.com/pim-service/api/products/list
+    url = "https://{}/pim-service/api/products/list".format(const.URL_ROSS)
+    body = {"currentPage": "1", "pageSize": 20, "articleNo": articleNo, "categories": categoryId}
+    response = requests.request("POST", url, json=body, headers=const.HEADERS_ROSS, verify=False)
 
     if response.status_code != 200:
-        raise Exception('商品家 查询商品ID状态码异常:{}'.format(response.status_code))
+        raise Exception('商品家 查询商品PID状态码异常:{}'.format(response.status_code))
     if str((res := response.json())['code']) != '0':
-        raise Exception('商品家 查询商品ID请求业务异常:{}'.format(res['code']))
+        raise Exception('商品家 查询商品PID请求业务异常:{}'.format(res['code']))
     if not res['data']['docs']:
-        raise Exception('商品家 查询商品ID失败，code:{}，articleNo={}'.format(res['code'], articleNo))
+        raise Exception('商品家 查询商品PID失败，articleNo={}'.format(res['code'], articleNo))
     else:
         return res['data']['docs'][0]['_id']
 
 
-@retry(Exception, tries=20, delay=1)
+@retry(Exception, tries=3, delay=1)
+def get_product_tm(id, target_key):
+    body = {
+        "schemaCode": None,
+        "brandId": None,
+        "vcode": target_key,
+        "value": None,  # 值
+        "remark": ''
+    }
+    url = "https://{}/tmall/j/api/v1/product/getProductForEdit?id={}".format(const.URL_ROSS, id)
+    response = requests.request("GET", url, headers=const.HEADERS_ROSS, verify=False)
+    if response.status_code != 200:
+        raise Exception('商品家 商品详情状态码异常:{}'.format(response.status_code))
+    if (response := response.json())['code'] != 0:
+        raise Exception('商品家 商品详情业务异常:{}'.format(response['code']))
+    if not response.get('data'):
+        raise Exception('商品家 商品详情没有data信息：{}'.format(id))
+
+    body['brandId'] = response['data']['prop_20000']
+
+    # 获取属性key(attributeId:1686) 所在的对象
+    item = response['data'].get(target_key)
+    if not item:
+        body['remark'] = '商品中没有找到这个属性=>{}'.format(target_key)
+    else:
+        if not item['value']:
+            body['remark'] = '商品属性中，{}对应的值为空'.format(target_key)
+        else:
+            body['value'] = item['value']  # 值
+
+    return body
+
+
+@retry(Exception, tries=10, delay=1)
 def get_jd_pid(articleNo):
     # print('开始查询商品家ID:{}'.format(articleNo))
     url = "https://{}/jd/api/v1/ware/wareList?exactMatch=true&criteria={\"itemNum\":{}}&pageSize=20&pageNo=1".format(
@@ -68,26 +103,6 @@ def get_jd_pid(articleNo):
         raise Exception('商品家 查询商品ID失败，code:{}，articleNo={}'.format(res['code'], articleNo))
     else:
         return res['data']['docs'][0]['_id']
-
-
-@retry(Exception, tries=20, delay=1)
-def get_tm_value(id, key_tm):
-    # key_type = ['singleCheck','multiCheck','input'] 取值方式是一样的，暂时用不到该字段
-    url = "https://{}/j/api/v1/product/getProductForEdit?id={}".format(const.URL_ROSS, id)
-
-    response = requests.request("GET", url, headers=const.HEADERS_ROSS, verify=False)
-    # print('>>>>商品家商品详情：{}'.format(response.text))
-    if response.status_code != 200:
-        raise Exception('商品家 查询商品详情状态码异常:{}'.format(response.status_code))
-    if (res := response.json())['code'] != 0:
-        raise Exception('商品家 查询商品详情请求业务异常:{}'.format(res['code']))
-    else:
-        if (km := res['data'].get(key_tm)):
-            return km.get('value'), km.get('type')  # ["7850140","137928"]
-        return None, None
-
-
-import json
 
 
 @retry(Exception, tries=10, delay=1)
@@ -137,13 +152,13 @@ def get_jd_value(pcode, attrKey='attrId', attrValue='', position='SPU', skuKey='
 
 
 @retry(Exception, tries=5, delay=1)
-def get_vip_value(pcode, attrkey='attributeId', attrvalue='', position='SPU'):
+def get_product_vip(pcode, attrkey='attributeId', attrvalue='', position='SPU'):
     # 需要返回的数据格式
-    vbody = {
+    body = {
         "schemaCode": None,
         "brandId": None,
-        "actual_vcode": None,
-        "actual_value": None,  # 值
+        "vcode": None,
+        "value": None,  # 值
         "remark": ''
     }
     url = 'https://{}/vip/sd/api/vip/product/query/detail/{}?spuId={}'.format(const.URL_ROSS, pcode, pcode)
@@ -156,22 +171,22 @@ def get_vip_value(pcode, attrkey='attributeId', attrvalue='', position='SPU'):
     if not response.get('data'):
         raise Exception('商品家商品没有data信息：{}'.format(pcode))
 
-    vbody['schemaCode'] = response['data']['basicInfo']['categoryId']
-    vbody['brandId'] = response['data']['basicInfo']['brandId']
+    body['schemaCode'] = response['data']['basicInfo']['categoryId']
+    body['brandId'] = response['data']['basicInfo']['brandId']
 
     # 获取属性key(attributeId:1686) 所在的对象
     item = get_target_item(response['data']['prodPropInfo'], attrkey, attrvalue)
     if not item:
-        vbody['remark'] = '商品属性列表中没有找到=>{}:{}'.format(attrkey, attrvalue)
+        body['remark'] = '商品属性列表中没有找到=>{}:{}'.format(attrkey, attrvalue)
     else:
         if not item['values']:
-            vbody['actual_vcode'] = None
-            vbody['remark'] = '商品属性列表中，{}:{}，对应值为空'.format(attrkey, attrvalue)
+            body['vcode'] = None
+            body['remark'] = '商品属性列表中，{}:{}，对应值为空'.format(attrkey, attrvalue)
         else:
-            vbody['actual_vcode'] = item['values'][0]['optionId']
-            vbody['actual_value'] = item['values'][0]['name']  # 值
+            body['vcode'] = item['values'][0]['optionId']
+            body['value'] = item['values'][0]['name']  # 值
 
-    return vbody
+    return body
 
 
 def delete_ross_product(pid):
