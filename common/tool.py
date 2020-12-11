@@ -3,7 +3,7 @@ import csv
 from openpyxl import load_workbook
 from openpyxl import Workbook
 import json
-
+import os
 from openpyxl.cell.cell import Cell
 from openpyxl.cell.cell import MergedCell
 from openpyxl.worksheet import worksheet
@@ -90,13 +90,12 @@ class GeneralTool:
 class ExcelTool:
 
     def __init__(self, filepath=None):
-        self.__filepath = filepath
+        self.filepath = filepath
         self.__load_workbook()
 
     def __load_workbook(self):
-        import os
-        if self.__filepath and os.path.exists(self.__filepath):
-            self.workbook = load_workbook(self.__filepath)
+        if self.filepath and os.path.exists(self.filepath):
+            self.workbook = load_workbook(self.filepath)
         else:
             self.workbook = Workbook()
 
@@ -243,8 +242,9 @@ class ExcelTool:
         workbook.save(filename=filename)
         workbook.close()
 
-    def write_data(self, sheetname, datas: list):
+    def append(self, sheetname, datas: list):
         '''
+        u need save in another method
         :param filename:
         :param sheetname:
         :param datas: 一维数组
@@ -253,9 +253,11 @@ class ExcelTool:
         if sheetname not in self.workbook.sheetnames:
             self.workbook.create_sheet(sheetname, index=0)
 
-        sheet = self.workbook[sheetname]
-        sheet.append([str(item) for item in datas])
-        self.workbook.save(self.__filepath)
+        ws = self.workbook[sheetname]
+        ws.append([str(item) for item in datas])
+
+    def save(self):
+        self.workbook.save(self.filepath)
 
     def merge_row(self, sheetname, idx_keyrow=0, idx_valuerow=1, skip_lines=0):
         '''
