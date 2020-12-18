@@ -13,9 +13,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 
 class Check():
 
-    def __init__(self, filepath=None):
+    def __init__(self, filepath=None, inifile='./conf/topsports.ini'):
         self.logger = logging.getLogger(Check.__name__)
-        self.__load_conf()
+        self.__load_conf(inifile)
         if filepath:
             self.filepath = filepath
             self._setup()
@@ -42,15 +42,15 @@ class Check():
 
         '''
         # self.channel = const.CHANNEL  # 根据不同渠道，判断如何查商品（商品家接不同平台接口名称不同）
-        self.filerows = self.__load_file(self.filepath)
+        self.filerows = self.__load_xlsx_file(self.filepath)
         self.items = self.__convert_items(self.filerows)
         self.logger.info('load file and convert item over, length of items is :{}'.format(len(self.items)))
 
-    def __load_conf(self):
+    def __load_conf(self, inifile):
         ''' 加载配置文件，获取基础配置信息 '''
         self.conf = RawConfigParser()
         self.conf.optionxform = str
-        self.conf.read('./conf/topsports.ini', encoding='utf-8-sig')
+        self.conf.read(inifile, encoding='utf-8-sig')
 
         # 获取基础配置
         self.channel = self.conf.get('Common', 'channel')
@@ -116,7 +116,7 @@ class Check():
     def __convert_items(self, merged_file_rows):
         return [self.__covert_row2item(row) for row in merged_file_rows]
 
-    def __load_file(self, filepath):
+    def __load_xlsx_file(self, filepath):
         '''load file and merge row to dict'''
         ext = ExcelTool(filepath)
         ws = ext.get_active_worksheet()
@@ -169,7 +169,6 @@ class Check():
             try:
                 pid = rossService.get_product_id_tm(pcode, target_sc)  # 通过货号+类目 查询商品ID，查不到报错
                 response = rossService.get_product_tm(pid, target_key)
-
                 taskitem['actual']['schemaCode'] = target_sc
                 taskitem['actual']['vcode'] = response.get('vcode')
                 taskitem['actual']['value'] = response.get('value')
@@ -196,7 +195,7 @@ class Check():
         report = model.Report(taskitem)
         return report.values()
 
-    def process_pim(self, taskitem):
+    def parse_pim(self, taskitem):
 
         # 解析数据item数据，格式参考items.json
         schemacode, schemapath, key, vcode, _, position, brand = taskitem['origin'].values()
@@ -226,10 +225,11 @@ class Check():
             pimService.release_product(pcode)
         except Exception as e:
             taskitem['actual']['remark'] = str(e)
+            self.logger.error(f'货品{pcode}创建发布过程中异常：{str(e)}')
 
         return taskitem
 
-    def process_ross(self, taskitem):
+    def parse_ross(self, taskitem):
 
         # 解析数据item数据，格式参考items.json
         schemacode, schemapath, key, vcode, _, position, brand = taskitem['origin'].values()
@@ -254,8 +254,8 @@ class Check():
             try:
                 response = rossService.get_product_vip(pcode, attrvalue=str(target_key), position=position)
                 taskitem['actual']['schemaCode'] = response.get('schemaCode')
-                taskitem['actual']['vcode'] = response.get('actual_vcode')
-                taskitem['actual']['value'] = response.get('actual_value')
+                taskitem['actual']['vcode'] = response.get('vcode')
+                taskitem['actual']['value'] = response.get('value')
                 taskitem['actual']['remark'] = response.get('remark')
             except Exception as e:
                 taskitem['actual']['remark'] = str(e)
@@ -285,61 +285,63 @@ class Check():
 
 
 def main():
-    start = time.time()
+    now = lambda: time.time()
 
     # 拼接文件路径   放在files中的第一个文件会被执行
     filepath = os.path.abspath(os.path.join(os.path.dirname(__file__), 'files', os.listdir('files')[0]))
     ck = Check(filepath=filepath)
 
     # 多任务执行 可能导致队列阻塞，改成循环执行
-    items = [ck.process_pim(item) for item in ck.items]  ## 如需测试,可使用分片
+    items = [ck.parse_pim(item) for item in ck.items]  ## 如需测试,可使用分片
 
-    name = f'vip_' + time.strftime('%m%d', time.localtime())
+    name = f'yougou_' + time.strftime('%m%d', time.localtime())
+
     # 将前半部分数据持久化
     with open(f'{name}.txt', mode='w', encoding='utf8') as file:
         file.write(json.dumps(items, ensure_ascii=False))
 
     ck.logger.info('pim 任务处理完成')
-    for i in range(0, 6):
-        ck.logger.info('sleep for a while')
-        time.sleep(10)
-    ck.logger.info('ross 任务开始')
-    pool = Pool(4)
-    reportlist = pool.map(ck.process_ross, items)
-    pool.close()
-    pool.join()
-    ck.logger.info('ross 任务处理完成')
 
-    # 记录测试报告
-    ext = ExcelTool(f"../report/report_{name}.xlsx")
-    ext.append(sheetname=name, datas=model.Report().headers())  # 标题
-    for data in reportlist:
-        ext.append(sheetname=name, datas=data)
-
-    ext.save()
-    end = time.time()
-    ck.logger.info('report 完成')
-    ck.logger.info(f'time:{round(end - start, 2)}')
+    # for i in range(0, 6):
+    #     ck.logger.info('sleep for a while')
+    #     time.sleep(10)
+    # ck.logger.info('ross 任务开始')
+    # pool = Pool(4)
+    # reportlist = pool.map(ck.process_ross, items)
+    # pool.close()
+    # pool.join()
+    # ck.logger.info('ross 任务处理完成')
+    #
+    # # 记录测试报告
+    # ext = ExcelTool(f"../report/report_{name}.xlsx")
+    # ext.append(sheetname=name, datas=model.Report().headers())  # 标题
+    # for data in reportlist:
+    #     ext.append(sheetname=name, datas=data)
+    #
+    # ext.save()
+    # end = time.time()
+    # ck.logger.info('report 完成')
+    # ck.logger.info(f'time:{round(end - start, 2)}')
 
 
 def main2():
     start = time.time()
     ck = Check()
 
-    name = 'tops'
-    with open('file_tops_1211.txt', encoding='utf8') as file:
+    name = 'yougo'
+    with open('yougou_1215.txt', encoding='utf8') as file:
         datas = file.read()
         items = json.loads(datas)
 
         ck.logger.info('ross 任务开始')
-        pool = Pool(4)
-        reportlist = pool.map(ck.process_ross, items)
+        pool = Pool()
+        reportlist = pool.map(ck.parse_ross, items)
         pool.close()
         pool.join()
         ck.logger.info('ross 任务处理完成')
 
         # 记录测试报告
-        ext = ExcelTool("../report/report_tm_1211.xlsx")
+        ext = ExcelTool("../report/report_tm_1215.xlsx")
         sheetname = f'{name}_' + time.strftime('%m%d%H%M', time.localtime())
         ext.append(sheetname=sheetname, datas=model.Report().headers())  # 标题
         for data in reportlist:
@@ -352,4 +354,4 @@ def main2():
 
 
 if __name__ == '__main__':
-    main()
+    main2()
